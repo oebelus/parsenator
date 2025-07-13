@@ -3,7 +3,7 @@ use crate::parser::{digits, Parser};
 mod parser;
 
 fn main() {
-    let parser = digits("17");
+    let parser = digits();
 
-    println!("{:?}", parser.parse("17"));
+    println!("{:?}", parser.parse("a17a"));
 }

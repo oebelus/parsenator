@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 
-use crate::parser;
-
-pub type Parsed<'a, Output> = Result<(&'a str, Output), &'a str>; // Parser Result
+pub type Parsed<'a, Output> = Result<(&'a str, Output), ParseError>; // Parser Result
 
 pub trait Parser<'a, Output> {
     fn parse(&self, input: &'a str) -> Parsed<'a, Output>;
@@ -22,6 +20,13 @@ pub enum Either<A, B> {
     Right(B),
 }
 
+#[derive(Debug)]
+pub enum ParseError {
+    Message(String),
+    Expected(String),
+    Unexpected(String),
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Types<'a> {
     Str(&'a str),
@@ -34,14 +39,20 @@ pub enum Types<'a> {
 pub fn char<'a>(expected: &'a char) -> impl Parser<'a, ()> {
     move |input: &'a str| match input.chars().nth(0).unwrap() {
         next if next == *expected => Ok((&input[1..], ())),
-        _ => Err(input),
+        _ => Err(ParseError::Expected(format!(
+            "Expected the character '{}' from the input '{}'",
+            expected, input,
+        ))),
     }
 }
 
 pub fn literal<'a>(expected: &'a str) -> impl Parser<'a, ()> {
     move |input: &'a str| match input.get(0..expected.len()) {
         Some(next) if next == expected => Ok((&input[expected.len()..], ())),
-        _ => Err(input),
+        _ => Err(ParseError::Expected(format!(
+            "Expected the literal '{}' from the input '{}'",
+            expected, input,
+        ))),
     }
 }
 
@@ -49,7 +60,10 @@ pub fn literal<'a>(expected: &'a str) -> impl Parser<'a, ()> {
 pub fn any_char<'a>() -> impl Parser<'a, char> {
     move |input: &'a str| match input.chars().next() {
         Some(next) => Ok((&input[1..], next)),
-        _ => Err(input),
+        _ => Err(ParseError::Expected(format!(
+            "Expected a character from input '{}'",
+            input,
+        ))),
     }
 }
 
@@ -59,10 +73,16 @@ pub fn digit<'a>() -> impl Parser<'a, char> {
             if next.is_numeric() {
                 Ok((&input[1..], next))
             } else {
-                Err(input)
+                Err(ParseError::Expected(format!(
+                    "Expected a digit from input '{}', but got '{}' instead",
+                    input, next
+                )))
             }
         }
-        _ => Err(input),
+        _ => Err(ParseError::Expected(format!(
+            "Expected a digit from input '{}'",
+            input,
+        ))),
     }
 }
 
@@ -76,10 +96,16 @@ pub fn letter<'a>() -> impl Parser<'a, char> {
             if next.is_alphabetic() {
                 Ok((&input[1..], next))
             } else {
-                Err(input)
+                Err(ParseError::Expected(format!(
+                    "Expected a letter from input '{}', but got '{}' instead",
+                    input, next
+                )))
             }
         }
-        _ => Err(input),
+        _ => Err(ParseError::Expected(format!(
+            "Expected a letter from input '{}'",
+            input,
+        ))),
     }
 }
 
@@ -93,10 +119,16 @@ pub fn alpha_num<'a>() -> impl Parser<'a, char> {
             if next.is_alphanumeric() {
                 Ok((&input[1..], next))
             } else {
-                Err(input)
+                Err(ParseError::Expected(format!(
+                    "Expected an alphanumeric from input '{}', but got '{}' instead.",
+                    input, next
+                )))
             }
         }
-        _ => Err(input),
+        _ => Err(ParseError::Expected(format!(
+            "Expected an alphanumeric from input {}",
+            input,
+        ))),
     }
 }
 
@@ -110,10 +142,16 @@ pub fn whitespace<'a>() -> impl Parser<'a, char> {
             if next == '\r' || next == ' ' || next == '\t' {
                 Ok((&input[1..], next))
             } else {
-                Err(input)
+                Err(ParseError::Expected(format!(
+                    "Expected a whitespace from input '{}', but got '{}' instead.",
+                    input, next
+                )))
             }
         }
-        _ => Err(input),
+        _ => Err(ParseError::Expected(format!(
+            "Expected a whitespace from input '{}'.",
+            input
+        ))),
     }
 }
 
@@ -126,7 +164,10 @@ pub fn end_of_input<'a>() -> impl Parser<'a, ()> {
         if input.is_empty() {
             Ok(("", ()))
         } else {
-            Err(input)
+            Err(ParseError::Expected(format!(
+                "Expected an end of input, but got '{}' instead.",
+                input
+            )))
         }
     }
 }
@@ -188,7 +229,10 @@ where
             input = next_input;
             result.push(first_item);
         } else {
-            return Err(input);
+            return Err(ParseError::Message(format!(
+                "A parser failed parsing the input '{}'",
+                input
+            )));
         }
 
         while let Ok((next_input, next_item)) = parser.parse(input) {
@@ -199,6 +243,47 @@ where
         Ok((input, result))
     }
 }
+
+pub fn optional<'a, P, A>(parser: P) -> impl Parser<'a, Option<A>>
+where
+    P: Parser<'a, A>,
+{
+    move |input| match parser.parse(input) {
+        Ok((rest, result)) => Ok((rest, Some(result))),
+        Err(_) => Ok((input, None)),
+    }
+}
+
+// pub fn sep_by<'a, P>(parser: P, delimiter: &'a str) -> impl Parser<'a, Vec<&'a str>>
+// where
+//     P: Parser<'a, &'a str>,
+// {
+//     move |input: &'a str| {
+//         let result: Vec<&'a str> = vec![];
+
+//         while !input.is_empty() {
+//             match look_ahead(1, delimiter.len()).parse(input) {
+//                 Ok((next_input, found_delimiter)) => {
+//                     if found_delimiter == delimiter {
+//                         input = next_input;
+//                         match parser.parse(input) {
+//                             Ok((next_input, res)) => {
+//                                 result.push(res);
+//                                 input = next_input;
+//                             }
+//                             Err(_) => break,
+//                         }
+//                     } else {
+//                         break;
+//                     }
+//                 }
+//                 Err(_) => return,
+//             }
+//         }
+
+//         Ok((input, result))
+//     }
+// }
 
 pub fn left<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, C>
 where
@@ -215,6 +300,8 @@ where
 {
     map(and(parser_a, parser_b), |(_left, right)| right)
 }
+
+/* TRANSFORMATION */
 
 pub fn map<'a, P, F, A, B>(parser: P, map_fn: F) -> impl Parser<'a, B>
 where
@@ -241,7 +328,10 @@ where
                 mut_input = next_input;
                 results.push(result);
             } else {
-                return Err(input);
+                return Err(ParseError::Message(format!(
+                    "A parser failed parsing the input '{}'",
+                    input
+                )));
             }
         }
 
@@ -249,18 +339,49 @@ where
     }
 }
 
+pub fn look_ahead<'a, P>(position: usize, range: usize) -> impl Parser<'a, &'a str> {
+    move |input: &'a str| {
+        let length = input.len();
+
+        if length >= position as usize {
+            Err(ParseError::Unexpected(format!(
+                "The position provided ('{}') is greater than the length ('{}') of the input '{}'.",
+                position, length, input
+            )))
+        } else if length >= position + range {
+            Err(ParseError::Unexpected(format!(
+                "The sum of the position and the range ('{}') is greater than the length ('{}') of the input '{}'.",
+                position + range, length, input
+            )))
+        } else {
+            Ok((&input[position + range..], &input[position..range]))
+        }
+    }
+}
+
 pub fn starts_with<'a>(prefix: &'a str) -> impl Parser<'a, bool> {
     move |input: &'a str| match input.starts_with(prefix) {
         true => Ok((input, true)),
-        false => Err(input),
+        false => Err(ParseError::Expected(format!(
+            "Expected the input '{}' to start with \"{prefix}\".",
+            input
+        ))),
     }
 }
 
 pub fn ends_with<'a>(suffix: &'a str) -> impl Parser<'a, bool> {
     move |input: &'a str| match input.ends_with(suffix) {
         true => Ok((input, true)),
-        false => Err(input),
+        false => Err(ParseError::Expected(format!(
+            "Expected the input '{}' to end with \"{suffix}\".",
+            input
+        ))),
     }
+}
+
+/* ERROR HANDLING */
+pub fn fail<'a>(message: &'a str) -> impl Parser<'a, ParseError> {
+    move |_input: &'a str| Err(ParseError::Message(message.to_string()))
 }
 
 /* UTILITY PARSERS */
@@ -270,7 +391,12 @@ pub fn identifier<'a>(input: &str) -> Parsed<String> {
 
     match chars.next() {
         Some(next) if next.is_alphabetic() => matched.push(next),
-        _ => return Err(input),
+        _ => {
+            return Err(ParseError::Expected(format!(
+                "Expected and identifier from the input '{}'.",
+                input
+            )))
+        }
     }
 
     while let Some(next) = chars.next() {
