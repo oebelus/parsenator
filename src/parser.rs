@@ -20,7 +20,7 @@ pub enum Either<A, B> {
     Right(B),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ParseError {
     Message(String),
     Expected(String),
@@ -57,9 +57,9 @@ pub fn literal<'a>(expected: &'a str) -> impl Parser<'a, ()> {
 }
 
 // GENERAL MATCHERS
-pub fn any_char<'a>() -> impl Parser<'a, char> {
+pub fn any_char<'a>() -> impl Parser<'a, String> {
     move |input: &'a str| match input.chars().next() {
-        Some(next) => Ok((&input[1..], next)),
+        Some(next) => Ok((&input[1..], next.to_string())),
         _ => Err(ParseError::Expected(format!(
             "Expected a character from input '{}'",
             input,
@@ -67,11 +67,11 @@ pub fn any_char<'a>() -> impl Parser<'a, char> {
     }
 }
 
-pub fn digit<'a>() -> impl Parser<'a, char> {
+pub fn digit<'a>() -> impl Parser<'a, String> {
     move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_numeric() {
-                Ok((&input[1..], next))
+                Ok((&input[1..], next.to_string()))
             } else {
                 Err(ParseError::Expected(format!(
                     "Expected a digit from input '{}', but got '{}' instead",
@@ -87,14 +87,14 @@ pub fn digit<'a>() -> impl Parser<'a, char> {
 }
 
 pub fn digits<'a>() -> impl Parser<'a, String> {
-    map(one_or_more(digit()), |chars| chars.iter().collect())
+    map(one_or_more(digit()), |chars| chars.into_iter().collect())
 }
 
-pub fn letter<'a>() -> impl Parser<'a, char> {
+pub fn letter<'a>() -> impl Parser<'a, String> {
     move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_alphabetic() {
-                Ok((&input[1..], next))
+                Ok((&input[1..], next.to_string()))
             } else {
                 Err(ParseError::Expected(format!(
                     "Expected a letter from input '{}', but got '{}' instead",
@@ -110,7 +110,7 @@ pub fn letter<'a>() -> impl Parser<'a, char> {
 }
 
 pub fn word<'a>() -> impl Parser<'a, String> {
-    map(one_or_more(letter()), |chars| chars.iter().collect())
+    map(one_or_more(letter()), |chars| chars.into_iter().collect())
 }
 
 pub fn alpha_num<'a>() -> impl Parser<'a, char> {
@@ -133,13 +133,13 @@ pub fn alpha_num<'a>() -> impl Parser<'a, char> {
 }
 
 pub fn alpha_num_word<'a>() -> impl Parser<'a, String> {
-    map(one_or_more(letter()), |chars| chars.iter().collect())
+    map(one_or_more(letter()), |chars| chars.into_iter().collect())
 }
 
 pub fn whitespace<'a>() -> impl Parser<'a, char> {
     move |input: &'a str| match input.chars().next() {
         Some(next) => {
-            if next == '\r' || next == ' ' || next == '\t' {
+            if next == '\r' || next == ' ' || next == '\t' || next == '\n' {
                 Ok((&input[1..], next))
             } else {
                 Err(ParseError::Expected(format!(
@@ -156,7 +156,7 @@ pub fn whitespace<'a>() -> impl Parser<'a, char> {
 }
 
 pub fn spaces<'a>() -> impl Parser<'a, String> {
-    map(zero_or_more(whitespace()), |chars| chars.iter().collect())
+    map(one_or_more(whitespace()), |chars| chars.iter().collect())
 }
 
 pub fn end_of_input<'a>() -> impl Parser<'a, ()> {
@@ -196,7 +196,10 @@ where
     move |input| match parser_a.parse(input) {
         Ok((next_input, result)) => Ok((next_input, Either::Left(result))),
         Err(_) => match parser_b.parse(input) {
-            Ok((next_input, result)) => Ok((next_input, Either::Right(result))),
+            Ok((next_input, result)) => {
+                println!("space af");
+                Ok((next_input, Either::Right(result)))
+            }
             Err(e) => Err(e),
         },
     }
@@ -254,36 +257,53 @@ where
     }
 }
 
-// pub fn sep_by<'a, P>(parser: P, delimiter: &'a str) -> impl Parser<'a, Vec<&'a str>>
-// where
-//     P: Parser<'a, &'a str>,
-// {
-//     move |input: &'a str| {
-//         let result: Vec<&'a str> = vec![];
+pub fn sep_by<'a, P>(parser: P, delimiter: &'a str) -> impl Parser<'a, Vec<String>>
+where
+    P: Parser<'a, String>,
+{
+    move |input: &'a str| {
+        let mut result: Vec<String> = vec![];
+        let mut remaining = input;
 
-//         while !input.is_empty() {
-//             match look_ahead(1, delimiter.len()).parse(input) {
-//                 Ok((next_input, found_delimiter)) => {
-//                     if found_delimiter == delimiter {
-//                         input = next_input;
-//                         match parser.parse(input) {
-//                             Ok((next_input, res)) => {
-//                                 result.push(res);
-//                                 input = next_input;
-//                             }
-//                             Err(_) => break,
-//                         }
-//                     } else {
-//                         break;
-//                     }
-//                 }
-//                 Err(_) => return,
-//             }
-//         }
+        match parser.parse(remaining) {
+            Ok((next, res)) => {
+                remaining = next;
+                result.push(res);
 
-//         Ok((input, result))
-//     }
-// }
+                loop {
+                    if let Ok((next, _)) = spaces().parse(remaining) {
+                        remaining = next;
+                    }
+
+                    if let Ok((next, found_delimiter)) =
+                        look_ahead::<P>(0, delimiter.len(), delimiter).parse(remaining)
+                    {
+                        if found_delimiter == delimiter {
+                            remaining = &next[delimiter.len()..];
+                        } else {
+                            println!("Value {} found in the input '{}' is not matching the provided delimiter {}", found_delimiter, remaining, delimiter);
+                        }
+                    } else {
+                        match parser.parse(remaining) {
+                            Ok((next, res)) => {
+                                result.push(res);
+                                remaining = next;
+                            }
+                            Err(_) => {
+                                break;
+                            }
+                        };
+                    }
+                }
+                Ok((remaining, result))
+            }
+            Err(_) => Err(ParseError::Unexpected(format!(
+                "Failed to parse the input '{}'.",
+                input
+            ))),
+        }
+    }
+}
 
 pub fn left<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, C>
 where
@@ -339,22 +359,35 @@ where
     }
 }
 
-pub fn look_ahead<'a, P>(position: usize, range: usize) -> impl Parser<'a, &'a str> {
+pub fn look_ahead<'a, P>(
+    position: usize,
+    range: usize,
+    delimiter: &'a str,
+) -> impl Parser<'a, &'a str> {
     move |input: &'a str| {
         let length = input.len();
 
-        if length >= position as usize {
+        if length <= position as usize {
             Err(ParseError::Unexpected(format!(
                 "The position provided ('{}') is greater than the length ('{}') of the input '{}'.",
                 position, length, input
             )))
-        } else if length >= position + range {
+        } else if length <= position + range {
             Err(ParseError::Unexpected(format!(
                 "The sum of the position and the range ('{}') is greater than the length ('{}') of the input '{}'.",
                 position + range, length, input
             )))
         } else {
-            Ok((&input[position + range..], &input[position..range]))
+            let delim = &input[position..range];
+
+            if delimiter == delim {
+                Ok((input, &input[position..range]))
+            } else {
+                Err(ParseError::Unexpected(format!(
+                    "The provided delimiter '{}' doesn't match the found value '{}' in the input '{}'.",
+                    delimiter, delim, input
+                )))
+            }
         }
     }
 }

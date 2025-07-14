@@ -1,9 +1,14 @@
-use crate::parser::{digits, Parser};
+use crate::parser::{digits, sep_by, Parser};
 
 mod parser;
 
-fn main() {
-    let parser = digits();
+#[cfg(test)]
+mod tests {
+    mod sep_by;
+}
 
-    println!("{:?}", parser.parse("a17a"));
+fn main() {
+    let parser = sep_by(digits(), ";;");
+
+    println!("{:?}", parser.parse("1;;\t2;;\n3"));
 }
