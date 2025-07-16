@@ -1,4 +1,4 @@
-use crate::parser::{digits, sep_by, Parser};
+use crate::parser::{any_char, between, char, digits, Parser};
 
 mod parser;
 
@@ -8,7 +8,7 @@ mod tests {
 }
 
 fn main() {
-    let parser = sep_by(digits(), ";;");
+    let parser = between(any_char(), char(&'('), char(&')'));
 
-    println!("{:?}", parser.parse("1;;\t2;;\n3"));
+    println!("{:?}", parser.parse("(a)"));
 }

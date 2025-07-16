@@ -56,6 +56,26 @@ pub fn literal<'a>(expected: &'a str) -> impl Parser<'a, ()> {
     }
 }
 
+pub fn starts_with<'a>(prefix: &'a str) -> impl Parser<'a, bool> {
+    move |input: &'a str| match input.starts_with(prefix) {
+        true => Ok((input, true)),
+        false => Err(ParseError::Expected(format!(
+            "Expected the input '{}' to start with \"{prefix}\".",
+            input
+        ))),
+    }
+}
+
+pub fn ends_with<'a>(suffix: &'a str) -> impl Parser<'a, bool> {
+    move |input: &'a str| match input.ends_with(suffix) {
+        true => Ok((input, true)),
+        false => Err(ParseError::Expected(format!(
+            "Expected the input '{}' to end with \"{suffix}\".",
+            input
+        ))),
+    }
+}
+
 // GENERAL MATCHERS
 pub fn any_char<'a>() -> impl Parser<'a, String> {
     move |input: &'a str| match input.chars().next() {
@@ -305,20 +325,18 @@ where
     }
 }
 
-pub fn left<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, C>
+pub fn between<'a, P1, P2, P, A, B, C>(parser: P, left: P1, right: P2) -> impl Parser<'a, A>
 where
-    A: Parser<'a, C>,
-    B: Parser<'a, D>,
+    P: Parser<'a, A>,
+    P1: Parser<'a, B>,
+    P2: Parser<'a, C>,
 {
-    map(and(parser_a, parser_b), |(left, _right)| left)
-}
-
-pub fn right<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, D>
-where
-    A: Parser<'a, C>,
-    B: Parser<'a, D>,
-{
-    map(and(parser_a, parser_b), |(_left, right)| right)
+    move |input| {
+        let (input, _) = left.parse(input)?;
+        let (input, result) = parser.parse(input)?;
+        let (input, _) = right.parse(input)?;
+        Ok((input, result))
+    }
 }
 
 /* TRANSFORMATION */
@@ -359,6 +377,22 @@ where
     }
 }
 
+pub fn left<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, C>
+where
+    A: Parser<'a, C>,
+    B: Parser<'a, D>,
+{
+    map(and(parser_a, parser_b), |(left, _right)| left)
+}
+
+pub fn right<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, D>
+where
+    A: Parser<'a, C>,
+    B: Parser<'a, D>,
+{
+    map(and(parser_a, parser_b), |(_left, right)| right)
+}
+
 pub fn look_ahead<'a, P>(
     position: usize,
     range: usize,
@@ -392,23 +426,20 @@ pub fn look_ahead<'a, P>(
     }
 }
 
-pub fn starts_with<'a>(prefix: &'a str) -> impl Parser<'a, bool> {
-    move |input: &'a str| match input.starts_with(prefix) {
-        true => Ok((input, true)),
-        false => Err(ParseError::Expected(format!(
-            "Expected the input '{}' to start with \"{prefix}\".",
-            input
-        ))),
-    }
-}
-
-pub fn ends_with<'a>(suffix: &'a str) -> impl Parser<'a, bool> {
-    move |input: &'a str| match input.ends_with(suffix) {
-        true => Ok((input, true)),
-        false => Err(ParseError::Expected(format!(
-            "Expected the input '{}' to end with \"{suffix}\".",
-            input
-        ))),
+pub fn not_followed_by<'a>(value: &'a str) -> impl Parser<'a, bool> {
+    move |input: &'a str| match input.get(1..value.len()) {
+        Some(following) => {
+            if following == value {
+                Err(ParseError::Unexpected(format!(
+                    "Unexpected value '{}' after '{}'",
+                    following,
+                    input.chars().next().unwrap()
+                )))
+            } else {
+                Ok((input, true))
+            }
+        }
+        None => Ok((input, true)),
     }
 }
 
