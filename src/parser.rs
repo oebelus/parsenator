@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::fmt::Debug;
+
 pub type Parsed<'a, Output> = Result<(&'a str, Output), ParseError>; // Parser Result
 
 pub trait Parser<'a, Output> {

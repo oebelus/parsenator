@@ -1,6 +1,8 @@
 [package]
-name = "parsecomb"
+name = "parsenator"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
+[lib]
+name = "parsenator"
+path = "src/parser.rs"
