@@ -9,6 +9,4 @@ mod tests {
 
 fn main() {
     let parser = between(any_char(), char(&'('), char(&')'));
-
-    println!("{:?}", parser.parse("(a)"));
 }
