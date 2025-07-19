@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use core::panic;
 use std::fmt::Debug;
 
 pub type Parsed<'a, Output> = Result<(&'a str, Output), ParseError>; // Parser Result
@@ -32,15 +33,88 @@ pub enum ParseError {
 #[derive(Debug, PartialEq)]
 pub enum Types<'a> {
     Str(&'a str),
+    String(String),
     StrVec(Vec<&'a str>),
+    Bool(bool),
+    Char(char),
+    Unit(()),
+}
+
+impl<'a> FromIterator<char> for Types<'a> {
+    fn from_iter<T: IntoIterator<Item = char>>(iter: T) -> Self {
+        Types::String(iter.into_iter().collect())
+    }
+}
+
+impl<'a> FromIterator<&'a str> for Types<'a> {
+    fn from_iter<T: IntoIterator<Item = &'a str>>(iter: T) -> Self {
+        Types::String(iter.into_iter().collect())
+    }
+}
+
+impl<'a> FromIterator<Types<'a>> for Types<'a> {
+    fn from_iter<T: IntoIterator<Item = Types<'a>>>(iter: T) -> Self {
+        let mut iter = iter.into_iter();
+        match iter.next() {
+            Some(Types::Str(s)) => {
+                let mut string = s.to_string();
+                for item in iter {
+                    if let Types::Str(s) = item {
+                        string.push_str(s);
+                    } else {
+                        panic!("Inconsistent Types in iterator.");
+                    }
+                }
+                Types::String(string)
+            }
+            Some(Types::String(s)) => {
+                let mut string = s;
+                for item in iter {
+                    if let Types::String(s) = item {
+                        string.push_str(&s);
+                    } else {
+                        panic!("Inconsistent Types in iterator.");
+                    }
+                }
+                Types::String(string)
+            }
+            Some(Types::StrVec(v)) => {
+                let mut vec = v;
+                for item in iter {
+                    if let Types::StrVec(v) = item {
+                        vec.extend(v);
+                    } else {
+                        panic!("Inconsistent Types in iterator.")
+                    }
+                }
+                Types::StrVec(vec)
+            }
+
+            Some(Types::Char(c)) => {
+                let mut string = c.to_string();
+                for item in iter {
+                    if let Types::Char(c) = item {
+                        string.push(c);
+                    } else {
+                        panic!("Inconsistent Types in iterator.")
+                    }
+                }
+                Types::String(string)
+            }
+            Some(Types::Bool(_)) => panic!("Cannot collect bools."),
+
+            Some(Types::Unit(_)) => panic!("Cannot collect units."),
+            None => Types::Unit(()),
+        }
+    }
 }
 
 /* BASIC COMBINATORS */
 
 // SPECIFIC MATCHERS
-pub fn char<'a>(expected: &'a char) -> impl Parser<'a, ()> {
+pub fn char<'a>(expected: &'a char) -> impl Parser<'a, Types<'a>> {
     move |input: &'a str| match input.chars().nth(0).unwrap() {
-        next if next == *expected => Ok((&input[1..], ())),
+        next if next == *expected => Ok((&input[1..], Types::Unit(()))),
         _ => Err(ParseError::Expected(format!(
             "Expected the character '{}' from the input '{}'",
             expected, input,
@@ -48,9 +122,9 @@ pub fn char<'a>(expected: &'a char) -> impl Parser<'a, ()> {
     }
 }
 
-pub fn literal<'a>(expected: &'a str) -> impl Parser<'a, ()> {
+pub fn literal<'a>(expected: &'a str) -> impl Parser<'a, Types<'a>> {
     move |input: &'a str| match input.get(0..expected.len()) {
-        Some(next) if next == expected => Ok((&input[expected.len()..], ())),
+        Some(next) if next == expected => Ok((&input[expected.len()..], Types::Unit(()))),
         _ => Err(ParseError::Expected(format!(
             "Expected the literal '{}' from the input '{}'",
             expected, input,
@@ -58,9 +132,9 @@ pub fn literal<'a>(expected: &'a str) -> impl Parser<'a, ()> {
     }
 }
 
-pub fn starts_with<'a>(prefix: &'a str) -> impl Parser<'a, bool> {
+pub fn starts_with<'a>(prefix: &'a str) -> impl Parser<'a, Types<'a>> {
     move |input: &'a str| match input.starts_with(prefix) {
-        true => Ok((input, true)),
+        true => Ok((input, Types::Bool(true))),
         false => Err(ParseError::Expected(format!(
             "Expected the input '{}' to start with \"{prefix}\".",
             input
@@ -68,9 +142,9 @@ pub fn starts_with<'a>(prefix: &'a str) -> impl Parser<'a, bool> {
     }
 }
 
-pub fn ends_with<'a>(suffix: &'a str) -> impl Parser<'a, bool> {
+pub fn ends_with<'a>(suffix: &'a str) -> impl Parser<'a, Types<'a>> {
     move |input: &'a str| match input.ends_with(suffix) {
-        true => Ok((input, true)),
+        true => Ok((input, Types::Bool(true))),
         false => Err(ParseError::Expected(format!(
             "Expected the input '{}' to end with \"{suffix}\".",
             input
@@ -79,9 +153,9 @@ pub fn ends_with<'a>(suffix: &'a str) -> impl Parser<'a, bool> {
 }
 
 // GENERAL MATCHERS
-pub fn any_char<'a>() -> impl Parser<'a, String> {
+pub fn any_char<'a>() -> impl Parser<'a, Types<'a>> {
     move |input: &'a str| match input.chars().next() {
-        Some(next) => Ok((&input[1..], next.to_string())),
+        Some(next) => Ok((&input[1..], Types::String(next.to_string()))),
         _ => Err(ParseError::Expected(format!(
             "Expected a character from input '{}'",
             input,
@@ -89,11 +163,11 @@ pub fn any_char<'a>() -> impl Parser<'a, String> {
     }
 }
 
-pub fn digit<'a>() -> impl Parser<'a, String> {
+pub fn digit<'a>() -> impl Parser<'a, Types<'a>> {
     move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_numeric() {
-                Ok((&input[1..], next.to_string()))
+                Ok((&input[1..], Types::String(next.to_string())))
             } else {
                 Err(ParseError::Expected(format!(
                     "Expected a digit from input '{}', but got '{}' instead",
@@ -108,15 +182,15 @@ pub fn digit<'a>() -> impl Parser<'a, String> {
     }
 }
 
-pub fn digits<'a>() -> impl Parser<'a, String> {
+pub fn digits<'a>() -> impl Parser<'a, Types<'a>> {
     map(one_or_more(digit()), |chars| chars.into_iter().collect())
 }
 
-pub fn letter<'a>() -> impl Parser<'a, String> {
+pub fn letter<'a>() -> impl Parser<'a, Types<'a>> {
     move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_alphabetic() {
-                Ok((&input[1..], next.to_string()))
+                Ok((&input[1..], Types::String(next.to_string())))
             } else {
                 Err(ParseError::Expected(format!(
                     "Expected a letter from input '{}', but got '{}' instead",
@@ -131,15 +205,15 @@ pub fn letter<'a>() -> impl Parser<'a, String> {
     }
 }
 
-pub fn word<'a>() -> impl Parser<'a, String> {
+pub fn word<'a>() -> impl Parser<'a, Types<'a>> {
     map(one_or_more(letter()), |chars| chars.into_iter().collect())
 }
 
-pub fn alpha_num<'a>() -> impl Parser<'a, char> {
+pub fn alpha_num<'a>() -> impl Parser<'a, Types<'a>> {
     move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_alphanumeric() {
-                Ok((&input[1..], next))
+                Ok((&input[1..], Types::Char(next)))
             } else {
                 Err(ParseError::Expected(format!(
                     "Expected an alphanumeric from input '{}', but got '{}' instead.",
@@ -154,15 +228,15 @@ pub fn alpha_num<'a>() -> impl Parser<'a, char> {
     }
 }
 
-pub fn alpha_num_word<'a>() -> impl Parser<'a, String> {
+pub fn alpha_num_word<'a>() -> impl Parser<'a, Types<'a>> {
     map(one_or_more(letter()), |chars| chars.into_iter().collect())
 }
 
-pub fn whitespace<'a>() -> impl Parser<'a, char> {
+pub fn whitespace<'a>() -> impl Parser<'a, Types<'a>> {
     move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next == '\r' || next == ' ' || next == '\t' || next == '\n' {
-                Ok((&input[1..], next))
+                Ok((&input[1..], Types::Char(next)))
             } else {
                 Err(ParseError::Expected(format!(
                     "Expected a whitespace from input '{}', but got '{}' instead.",
@@ -177,14 +251,16 @@ pub fn whitespace<'a>() -> impl Parser<'a, char> {
     }
 }
 
-pub fn spaces<'a>() -> impl Parser<'a, String> {
-    map(one_or_more(whitespace()), |chars| chars.iter().collect())
+pub fn spaces<'a>() -> impl Parser<'a, Types<'a>> {
+    map(one_or_more(whitespace()), |chars| {
+        chars.into_iter().collect()
+    })
 }
 
-pub fn end_of_input<'a>() -> impl Parser<'a, ()> {
+pub fn end_of_input<'a>() -> impl Parser<'a, Types<'a>> {
     move |input: &'a str| {
         if input.is_empty() {
-            Ok(("", ()))
+            Ok(("", Types::Unit(())))
         } else {
             Err(ParseError::Expected(format!(
                 "Expected an end of input, but got '{}' instead.",
@@ -227,9 +303,9 @@ where
     }
 }
 
-pub fn zero_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
+pub fn zero_or_more<'a, P>(parser: P) -> impl Parser<'a, Vec<Types<'a>>>
 where
-    P: Parser<'a, A>,
+    P: Parser<'a, Types<'a>>,
 {
     move |mut input| {
         let mut result = Vec::new();
