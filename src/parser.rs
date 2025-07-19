@@ -1,20 +1,24 @@
-#![allow(dead_code)]
-
 use core::panic;
 use std::fmt::Debug;
 
-pub type Parsed<'a, Output> = Result<(&'a str, Output), ParseError>; // Parser Result
+pub type Parsed<'a, T> = Result<(&'a str, T), ParseError>; // Parser Result, T is the Output
 
-pub trait Parser<'a, Output> {
-    fn parse(&self, input: &'a str) -> Parsed<'a, Output>;
+pub trait Parser<'a, T> {
+    fn parse(&self, input: &'a str) -> Parsed<'a, T>;
 }
 
-impl<'a, F, Output> Parser<'a, Output> for F
+impl<'a, F, T> Parser<'a, T> for F
 where
-    F: Fn(&'a str) -> Parsed<'a, Output>,
+    F: Fn(&'a str) -> Parsed<'a, T>,
 {
-    fn parse(&self, input: &'a str) -> Parsed<'a, Output> {
+    fn parse(&self, input: &'a str) -> Parsed<'a, T> {
         self(input)
+    }
+}
+
+impl<'a, T> Parser<'a, T> for Box<dyn Parser<'a, T> + 'a> {
+    fn parse(&self, input: &'a str) -> Parsed<'a, T> {
+        self.as_ref().parse(input)
     }
 }
 
@@ -28,15 +32,15 @@ pub enum ParseError {
     Message(String),
     Expected(String),
     Unexpected(String),
+    EOF,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Types<'a> {
     Str(&'a str),
     String(String),
-    StrVec(Vec<&'a str>),
+    TypesVec(Vec<Types<'a>>),
     Bool(bool),
-    Char(char),
     Unit(()),
 }
 
@@ -78,29 +82,18 @@ impl<'a> FromIterator<Types<'a>> for Types<'a> {
                 }
                 Types::String(string)
             }
-            Some(Types::StrVec(v)) => {
+            Some(Types::TypesVec(v)) => {
                 let mut vec = v;
                 for item in iter {
-                    if let Types::StrVec(v) = item {
+                    if let Types::TypesVec(v) = item {
                         vec.extend(v);
                     } else {
                         panic!("Inconsistent Types in iterator.")
                     }
                 }
-                Types::StrVec(vec)
+                Types::TypesVec(vec)
             }
 
-            Some(Types::Char(c)) => {
-                let mut string = c.to_string();
-                for item in iter {
-                    if let Types::Char(c) = item {
-                        string.push(c);
-                    } else {
-                        panic!("Inconsistent Types in iterator.")
-                    }
-                }
-                Types::String(string)
-            }
             Some(Types::Bool(_)) => panic!("Cannot collect bools."),
 
             Some(Types::Unit(_)) => panic!("Cannot collect units."),
@@ -112,14 +105,14 @@ impl<'a> FromIterator<Types<'a>> for Types<'a> {
 /* BASIC COMBINATORS */
 
 // SPECIFIC MATCHERS
-pub fn char<'a>(expected: &'a char) -> impl Parser<'a, Types<'a>> {
-    move |input: &'a str| match input.chars().nth(0).unwrap() {
+pub fn char<'a>(expected: &'a char) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.chars().nth(0).unwrap() {
         next if next == *expected => Ok((&input[1..], Types::Unit(()))),
         _ => Err(ParseError::Expected(format!(
             "Expected the character '{}' from the input '{}'",
             expected, input,
         ))),
-    }
+    })
 }
 
 pub fn literal<'a>(expected: &'a str) -> impl Parser<'a, Types<'a>> {
@@ -163,8 +156,8 @@ pub fn any_char<'a>() -> impl Parser<'a, Types<'a>> {
     }
 }
 
-pub fn digit<'a>() -> impl Parser<'a, Types<'a>> {
-    move |input: &'a str| match input.chars().next() {
+pub fn digit<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'static> {
+    Box::new(move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_numeric() {
                 Ok((&input[1..], Types::String(next.to_string())))
@@ -179,15 +172,17 @@ pub fn digit<'a>() -> impl Parser<'a, Types<'a>> {
             "Expected a digit from input '{}'",
             input,
         ))),
-    }
+    })
 }
 
-pub fn digits<'a>() -> impl Parser<'a, Types<'a>> {
-    map(one_or_more(digit()), |chars| chars.into_iter().collect())
+pub fn digits<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(map(one_or_more(digit()), |chars: Vec<Types<'a>>| {
+        chars.into_iter().collect()
+    }))
 }
 
-pub fn letter<'a>() -> impl Parser<'a, Types<'a>> {
-    move |input: &'a str| match input.chars().next() {
+pub fn letter<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'static> {
+    Box::new(move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_alphabetic() {
                 Ok((&input[1..], Types::String(next.to_string())))
@@ -202,18 +197,21 @@ pub fn letter<'a>() -> impl Parser<'a, Types<'a>> {
             "Expected a letter from input '{}'",
             input,
         ))),
-    }
+    })
 }
 
-pub fn word<'a>() -> impl Parser<'a, Types<'a>> {
-    map(one_or_more(letter()), |chars| chars.into_iter().collect())
+pub fn word<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(map(one_or_more(letter()), |chars| {
+        chars.into_iter().collect()
+    }))
 }
 
-pub fn alpha_num<'a>() -> impl Parser<'a, Types<'a>> {
-    move |input: &'a str| match input.chars().next() {
+//xpected struct `Box<dyn Parser<'_, T>>`
+pub fn alpha_num<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_alphanumeric() {
-                Ok((&input[1..], Types::Char(next)))
+                Ok((&input[1..], Types::String(next.to_string())))
             } else {
                 Err(ParseError::Expected(format!(
                     "Expected an alphanumeric from input '{}', but got '{}' instead.",
@@ -225,18 +223,20 @@ pub fn alpha_num<'a>() -> impl Parser<'a, Types<'a>> {
             "Expected an alphanumeric from input {}",
             input,
         ))),
-    }
+    })
 }
 
-pub fn alpha_num_word<'a>() -> impl Parser<'a, Types<'a>> {
-    map(one_or_more(letter()), |chars| chars.into_iter().collect())
+pub fn alpha_num_word<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(map(one_or_more(letter()), |chars| {
+        chars.into_iter().collect()
+    }))
 }
 
-pub fn whitespace<'a>() -> impl Parser<'a, Types<'a>> {
-    move |input: &'a str| match input.chars().next() {
+pub fn whitespace<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'static> {
+    Box::new(move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next == '\r' || next == ' ' || next == '\t' || next == '\n' {
-                Ok((&input[1..], Types::Char(next)))
+                Ok((&input[1..], Types::String(next.to_string())))
             } else {
                 Err(ParseError::Expected(format!(
                     "Expected a whitespace from input '{}', but got '{}' instead.",
@@ -248,7 +248,7 @@ pub fn whitespace<'a>() -> impl Parser<'a, Types<'a>> {
             "Expected a whitespace from input '{}'.",
             input
         ))),
-    }
+    })
 }
 
 pub fn spaces<'a>() -> impl Parser<'a, Types<'a>> {
@@ -303,7 +303,7 @@ where
     }
 }
 
-pub fn zero_or_more<'a, P>(parser: P) -> impl Parser<'a, Vec<Types<'a>>>
+pub fn zero_or_more<'a, P>(parser: P) -> impl Parser<'a, Types<'a>>
 where
     P: Parser<'a, Types<'a>>,
 {
@@ -315,15 +315,12 @@ where
             result.push(next_item);
         }
 
-        Ok((input, result))
+        Ok((input, Types::TypesVec(result)))
     }
 }
 
-pub fn one_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
-where
-    P: Parser<'a, A>,
-{
-    move |mut input| {
+pub fn one_or_more<'a, A: 'a>(parser: Box<dyn Parser<'a, A>>) -> Box<dyn Parser<'a, Vec<A>> + 'a> {
+    Box::new(move |mut input| {
         let mut result = Vec::new();
 
         if let Ok((next_input, first_item)) = parser.parse(input) {
@@ -342,7 +339,7 @@ where
         }
 
         Ok((input, result))
-    }
+    })
 }
 
 pub fn optional<'a, P, A>(parser: P) -> impl Parser<'a, Option<A>>
@@ -403,18 +400,17 @@ where
     }
 }
 
-pub fn between<'a, P1, P2, P, A, B, C>(parser: P, left: P1, right: P2) -> impl Parser<'a, A>
-where
-    P: Parser<'a, A>,
-    P1: Parser<'a, B>,
-    P2: Parser<'a, C>,
-{
-    move |input| {
+pub fn between<'a, P1, P2, P, A: 'a, B: 'a, C: 'a>(
+    left: Box<dyn Parser<'a, B> + 'a>,
+    parser: Box<dyn Parser<'a, A> + 'a>,
+    right: Box<dyn Parser<'a, C> + 'a>,
+) -> Box<dyn Parser<'a, A> + 'a> {
+    Box::new(move |input| {
         let (input, _) = left.parse(input)?;
         let (input, result) = parser.parse(input)?;
         let (input, _) = right.parse(input)?;
         Ok((input, result))
-    }
+    })
 }
 
 /* TRANSFORMATION */
@@ -431,7 +427,7 @@ where
     }
 }
 
-pub fn sequence<'a, P>(parsers: Vec<P>) -> impl Parser<'a, Vec<Types<'a>>>
+pub fn sequence<'a, P>(parsers: Vec<P>) -> impl Parser<'a, Types<'a>>
 where
     P: Parser<'a, Types<'a>>,
 {
@@ -451,8 +447,34 @@ where
             }
         }
 
-        Ok((mut_input, results))
+        Ok((mut_input, Types::TypesVec(results)))
     }
+}
+
+pub fn choice<'a, T: 'a>(parsers: Vec<Box<dyn Parser<'a, T> + 'a>>) -> Box<dyn Parser<'a, T> + 'a> {
+    Box::new(move |input| {
+        for parser in &parsers {
+            if let Ok(result) = parser.parse(input) {
+                return Ok(result);
+            }
+        }
+
+        Err(ParseError::Unexpected(format!(
+            "No parsers of choice can parse this input {input}"
+        )))
+    })
+}
+
+fn atom<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    choice(vec![alpha_num(), alpha_num_word()])
+}
+
+fn expression<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    choice(vec![atom(), paren_expr()])
+}
+
+fn paren_expr<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(between(char(&'('), expression(), char(&')')))
 }
 
 pub fn left<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, C>

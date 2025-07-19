@@ -34,12 +34,13 @@ They succeed on any valid input, rather than matching an exact expected value:
 - `one_or_more` – Parses one or more occurrences of a given parser;
 - `optional` – Parses zero or one occurrence of a given parser;
 - `sep_by` – Parses a sequence separated by a delimiter (e.g., `1,2,3` to `[1, 2, 3]`);
-- `between` – Parsers something between two other parsers (e.g., brackets `(x)` to `x`).
+- `between` – Parsers something between two other parsers (e.g., brackets `(x)` to `x`);
 
 ## 3. Transformation
 
 - `map` – Applies a function to the result of a parser;
 - `seq` – Chains parsers;
+- `choice` - Tries each parser in order until one succeeds;
 - `left` - Runs two parsers in sequence and returns the result of the first parser;
 - `right` - Runs two parsers in sequence and returns the result of the right parser;
 - `look_ahead` – Checks if a parser matches without consuming input;
