@@ -105,9 +105,9 @@ impl<'a> FromIterator<Types<'a>> for Types<'a> {
 /* BASIC COMBINATORS */
 
 // SPECIFIC MATCHERS
-pub fn char<'a>(expected: &'a char) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+pub fn char<'a>(expected: char) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
     Box::new(move |input: &'a str| match input.chars().nth(0).unwrap() {
-        next if next == *expected => Ok((&input[1..], Types::Unit(()))),
+        next if next == expected => Ok((&input[1..], Types::Unit(()))),
         _ => Err(ParseError::Expected(format!(
             "Expected the character '{}' from the input '{}'",
             expected, input,
@@ -400,17 +400,17 @@ where
     }
 }
 
-pub fn between<'a, P1, P2, P, A: 'a, B: 'a, C: 'a>(
+pub fn between<'a, A: 'a, B: 'a, C: 'a>(
     left: Box<dyn Parser<'a, B> + 'a>,
     parser: Box<dyn Parser<'a, A> + 'a>,
     right: Box<dyn Parser<'a, C> + 'a>,
-) -> Box<dyn Parser<'a, A> + 'a> {
-    Box::new(move |input| {
+) -> impl Parser<'a, A> + 'a {
+    move |input| {
         let (input, _) = left.parse(input)?;
         let (input, result) = parser.parse(input)?;
         let (input, _) = right.parse(input)?;
         Ok((input, result))
-    })
+    }
 }
 
 /* TRANSFORMATION */
@@ -463,18 +463,6 @@ pub fn choice<'a, T: 'a>(parsers: Vec<Box<dyn Parser<'a, T> + 'a>>) -> Box<dyn P
             "No parsers of choice can parse this input {input}"
         )))
     })
-}
-
-fn atom<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
-    choice(vec![alpha_num(), alpha_num_word()])
-}
-
-fn expression<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
-    choice(vec![atom(), paren_expr()])
-}
-
-fn paren_expr<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
-    Box::new(between(char(&'('), expression(), char(&')')))
 }
 
 pub fn left<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, C>
