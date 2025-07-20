@@ -56,6 +56,22 @@ impl<'a> FromIterator<&'a str> for Types<'a> {
     }
 }
 
+impl<'a> ToString for Types<'a> {
+    fn to_string(&self) -> String {
+        match self {
+            Types::Str(s) => s.to_string(),
+            Types::String(s) => s.to_string(),
+            Types::TypesVec(items) => items
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join(" "),
+            Types::Bool(b) => b.to_string(),
+            Types::Unit(_) => " ".to_string(),
+        }
+    }
+}
+
 impl<'a> FromIterator<Types<'a>> for Types<'a> {
     fn from_iter<T: IntoIterator<Item = Types<'a>>>(iter: T) -> Self {
         let mut iter = iter.into_iter();
