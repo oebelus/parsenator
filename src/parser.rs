@@ -115,45 +115,45 @@ pub fn char<'a>(expected: char) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
     })
 }
 
-pub fn literal<'a>(expected: &'a str) -> impl Parser<'a, Types<'a>> {
-    move |input: &'a str| match input.get(0..expected.len()) {
+pub fn literal<'a>(expected: &'a str) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.get(0..expected.len()) {
         Some(next) if next == expected => Ok((&input[expected.len()..], Types::Unit(()))),
         _ => Err(ParseError::Expected(format!(
             "Expected the literal '{}' from the input '{}'",
             expected, input,
         ))),
-    }
+    })
 }
 
-pub fn starts_with<'a>(prefix: &'a str) -> impl Parser<'a, Types<'a>> {
-    move |input: &'a str| match input.starts_with(prefix) {
+pub fn starts_with<'a>(prefix: &'a str) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.starts_with(prefix) {
         true => Ok((input, Types::Bool(true))),
         false => Err(ParseError::Expected(format!(
             "Expected the input '{}' to start with \"{prefix}\".",
             input
         ))),
-    }
+    })
 }
 
-pub fn ends_with<'a>(suffix: &'a str) -> impl Parser<'a, Types<'a>> {
-    move |input: &'a str| match input.ends_with(suffix) {
+pub fn ends_with<'a>(suffix: &'a str) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.ends_with(suffix) {
         true => Ok((input, Types::Bool(true))),
         false => Err(ParseError::Expected(format!(
             "Expected the input '{}' to end with \"{suffix}\".",
             input
         ))),
-    }
+    })
 }
 
 // GENERAL MATCHERS
-pub fn any_char<'a>() -> impl Parser<'a, Types<'a>> {
-    move |input: &'a str| match input.chars().next() {
+pub fn any_char<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.chars().next() {
         Some(next) => Ok((&input[1..], Types::String(next.to_string()))),
         _ => Err(ParseError::Expected(format!(
             "Expected a character from input '{}'",
             input,
         ))),
-    }
+    })
 }
 
 pub fn digit<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'static> {
@@ -251,10 +251,10 @@ pub fn whitespace<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'static> {
     })
 }
 
-pub fn spaces<'a>() -> impl Parser<'a, Types<'a>> {
-    map(one_or_more(whitespace()), |chars| {
+pub fn spaces<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(map(one_or_more(whitespace()), |chars| {
         chars.into_iter().collect()
-    })
+    }))
 }
 
 pub fn end_of_input<'a>() -> impl Parser<'a, Types<'a>> {
@@ -459,9 +459,7 @@ pub fn choice<'a, T: 'a>(parsers: Vec<Box<dyn Parser<'a, T> + 'a>>) -> Box<dyn P
             }
         }
 
-        Err(ParseError::Unexpected(format!(
-            "No parsers of choice can parse this input {input}"
-        )))
+        Err(ParseError::Unexpected(format!("anyt {input}")))
     })
 }
 
