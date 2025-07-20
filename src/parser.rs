@@ -67,7 +67,7 @@ impl<'a> ToString for Types<'a> {
                 .collect::<Vec<String>>()
                 .join(" "),
             Types::Bool(b) => b.to_string(),
-            Types::Unit(_) => " ".to_string(),
+            Types::Unit(_) => "".to_string(),
         }
     }
 }
@@ -426,6 +426,16 @@ pub fn between<'a, A: 'a, B: 'a, C: 'a>(
         let (input, result) = parser.parse(input)?;
         let (input, _) = right.parse(input)?;
         Ok((input, result))
+    }
+}
+
+pub fn skip<'a, A: 'a>(parser: Box<dyn Parser<'a, A> + 'a>) -> impl Parser<'a, Types<'a>> + 'a {
+    move |input| match parser.parse(input) {
+        Ok((next, _result)) => Ok((next, Types::Unit(()))),
+        Err(e) => Err(ParseError::Unexpected(format!(
+            "Unexpected input '{}', error being : {:?}.",
+            input, e
+        ))),
     }
 }
 

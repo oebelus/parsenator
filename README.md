@@ -35,6 +35,7 @@ They succeed on any valid input, rather than matching an exact expected value:
 - `optional` – Parses zero or one occurrence of a given parser;
 - `sep_by` – Parses a sequence separated by a delimiter (e.g., `1,2,3` to `[1, 2, 3]`);
 - `between` – Parsers something between two other parsers (e.g., brackets `(x)` to `x`);
+- `skip` - Parses characters and skip them if success.
 
 ## 3. Transformation
 
