@@ -106,8 +106,8 @@ impl<'a> FromIterator<Types<'a>> for Types<'a> {
 
 // SPECIFIC MATCHERS
 pub fn char<'a>(expected: char) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
-    Box::new(move |input: &'a str| match input.chars().nth(0).unwrap() {
-        next if next == expected => Ok((&input[1..], Types::Unit(()))),
+    Box::new(move |input: &'a str| match input.chars().nth(0) {
+        next if next == Some(expected) => Ok((&input[1..], Types::Unit(()))),
         _ => Err(ParseError::Expected(format!(
             "Expected the character '{}' from the input '{}'",
             expected, input,
