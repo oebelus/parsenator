@@ -429,14 +429,14 @@ pub fn between<'a, A: 'a, B: 'a, C: 'a>(
     }
 }
 
-pub fn skip<'a, A: 'a>(parser: Box<dyn Parser<'a, A> + 'a>) -> impl Parser<'a, Types<'a>> + 'a {
-    move |input| match parser.parse(input) {
+pub fn skip<'a, A: 'a>(parser: Box<dyn Parser<'a, A> + 'a>) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input| match parser.parse(input) {
         Ok((next, _result)) => Ok((next, Types::Unit(()))),
         Err(e) => Err(ParseError::Unexpected(format!(
             "Unexpected input '{}', error being : {:?}.",
             input, e
         ))),
-    }
+    })
 }
 
 /* TRANSFORMATION */
