@@ -16,7 +16,7 @@ They match a specific input:
 They succeed on any valid input, rather than matching an exact expected value:
 
 - `digit` – Parses a single digit (0-9);
-- `number` – Parses many digits;
+- `digits` – Parses many digits;
 - `letter` – Parses a single letter (a-z, A-Z);
 - `word` - Parses many letters;
 - `any_char` – Parses any single character;
