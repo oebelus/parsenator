@@ -368,12 +368,12 @@ where
     }
 }
 
-pub fn sep_by<'a, P>(parser: P, delimiter: &'a str) -> impl Parser<'a, Vec<String>>
+pub fn sep_by<'a, P, T>(parser: P, delimiter: &'a str) -> impl Parser<'a, Vec<T>>
 where
-    P: Parser<'a, String>,
+    P: Parser<'a, T>,
 {
     move |input: &'a str| {
-        let mut result: Vec<String> = vec![];
+        let mut result = vec![];
         let mut remaining = input;
 
         match parser.parse(remaining) {
