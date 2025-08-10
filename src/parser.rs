@@ -126,7 +126,7 @@ impl<'a> FromIterator<Types<'a>> for Types<'a> {
 // SPECIFIC MATCHERS
 pub fn char<'a, S>(expected: char) -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(move |input: &'a S| match input.chars().next() {
         next if next == Some(expected) => Ok((&input[1..], Types::Unit(()))),
@@ -139,7 +139,7 @@ where
 
 pub fn literal<'a, S>(expected: &'a str) -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(move |input: &'a S| match input.get(0..expected.len()) {
         Some(next) if next == expected => Ok((&input[expected.len()..], Types::Unit(()))),
@@ -152,7 +152,7 @@ where
 
 pub fn starts_with<'a, S>(prefix: &'a S) -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(move |input: &'a S| {
         let prefix_str = prefix.as_ref();
@@ -168,7 +168,7 @@ where
 
 pub fn ends_with<'a, S>(suffix: &'a S) -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(move |input: &'a S| {
         let suffix_str = suffix.as_ref();
@@ -185,7 +185,7 @@ where
 // GENERAL MATCHERS
 pub fn any_char<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(move |input: &'a S| match input.chars().next() {
         Some(next) => Ok((&input[1..], Types::String(next.to_string()))),
@@ -198,7 +198,7 @@ where
 
 pub fn digit<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'static>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(move |input: &'a S| match input.chars().next() {
         Some(next) => {
@@ -220,7 +220,7 @@ where
 
 pub fn digits<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(map(one_or_more(digit()), |chars: Vec<Types<'a>>| {
         chars.into_iter().collect()
@@ -229,7 +229,7 @@ where
 
 pub fn letter<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'static>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(move |input: &'a S| match input.chars().next() {
         Some(next) => {
@@ -251,7 +251,7 @@ where
 
 pub fn word<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(map(one_or_more(letter()), |chars| {
         chars.into_iter().collect()
@@ -261,7 +261,7 @@ where
 //xpected struct `Box<dyn Parser<'_, T>>`
 pub fn alpha_num<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(move |input: &'a S| match input.chars().next() {
         Some(next) => {
@@ -283,7 +283,7 @@ where
 
 pub fn alpha_num_word<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(map(one_or_more(letter()), |chars| {
         chars.into_iter().collect()
@@ -292,7 +292,7 @@ where
 
 pub fn whitespace<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'static>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(move |input: &'a S| match input.chars().next() {
         Some(next) => {
@@ -314,7 +314,7 @@ where
 
 pub fn spaces<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(map(one_or_more(whitespace()), |chars| {
         chars.into_iter().collect()
@@ -429,9 +429,9 @@ where
 
 pub fn sep_by<'a, S, P, T>(parser: P, delimiter: &'a S) -> impl Parser<'a, S, Vec<T>>
 where
-    P: Parser<'a, S, T>,
+    P: Parser<'a, S, T> + 'a,
     S: AsRef<str>
-        + Deref<Target = str>
+        + Deref<Target = String>
         + 'a
         + Display
         + Index<RangeFrom<usize>, Output = S>
@@ -499,7 +499,7 @@ pub fn skip<'a, S: 'a, A: 'a>(
     parser: Box<dyn Parser<'a, S, A> + 'a>,
 ) -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     Box::new(move |input| match parser.parse(input) {
         Ok((next, _result)) => Ok((next, Types::Unit(()))),
@@ -527,7 +527,7 @@ where
 pub fn sequence<'a, S: 'a, P>(parsers: Vec<P>) -> impl Parser<'a, S, Types<'a>>
 where
     P: Parser<'a, S, Types<'a>>,
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     move |input| {
         let mut results: Vec<Types> = Vec::new();
@@ -586,7 +586,7 @@ pub fn look_ahead<'a, S, P>(
 ) -> impl Parser<'a, S, &'a S>
 where
     S: AsRef<str>
-        + Deref<Target = str>
+        + Deref<Target = String>
         + 'a
         + Display
         + Index<Range<usize>, Output = S>
@@ -623,7 +623,7 @@ where
 pub fn not_followed_by<'a, S>(value: &'a S) -> impl Parser<'a, S, bool>
 where
     S: AsRef<str>
-        + Deref<Target = str>
+        + Deref<Target = String>
         + 'a
         + Display
         + Index<Range<usize>, Output = S>
@@ -648,7 +648,7 @@ where
 /* ERROR HANDLING */
 pub fn fail<'a, S>(message: &'a S) -> impl Parser<'a, S, ParseError>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display,
+    S: AsRef<str> + Deref + 'a + Display,
 {
     move |_input: &'a S| Err(ParseError::Message(message.to_string()))
 }
@@ -656,7 +656,7 @@ where
 /* UTILITY PARSERS */
 pub fn identifier<'a, S: 'a>(input: &S) -> Parsed<S, String>
 where
-    S: AsRef<str> + Deref<Target = str> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
 {
     let mut matched = String::new();
     let mut chars = input.chars();
