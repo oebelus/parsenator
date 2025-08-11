@@ -258,7 +258,6 @@ where
     }))
 }
 
-//xpected struct `Box<dyn Parser<'_, T>>`
 pub fn alpha_num<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
 where
     S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
