@@ -1,26 +1,23 @@
 use core::panic;
-use std::{
-    fmt::{Debug, Display},
-    ops::{Deref, Index, Range, RangeFrom},
-};
+use std::fmt::Debug;
 
-pub type Parsed<'a, S, T> = Result<(&'a S, T), ParseError>; // Parser Result, T is the Output
+pub type Parsed<'a, T> = Result<(&'a str, T), ParseError>; // Parser Result, T is the Output
 
-pub trait Parser<'a, S, T> {
-    fn parse(&self, input: &'a S) -> Parsed<'a, S, T>;
+pub trait Parser<'a, T> {
+    fn parse(&self, input: &'a str) -> Parsed<'a, T>;
 }
 
-impl<'a, F, T, S: 'a> Parser<'a, S, T> for F
+impl<'a, F, T> Parser<'a, T> for F
 where
-    F: Fn(&'a S) -> Parsed<'a, S, T>,
+    F: Fn(&'a str) -> Parsed<'a, T>,
 {
-    fn parse(&self, input: &'a S) -> Parsed<'a, S, T> {
+    fn parse(&self, input: &'a str) -> Parsed<'a, T> {
         self(input)
     }
 }
 
-impl<'a, T, S> Parser<'a, S, T> for Box<dyn Parser<'a, S, T> + 'a> {
-    fn parse(&self, input: &'a S) -> Parsed<'a, S, T> {
+impl<'a, T> Parser<'a, T> for Box<dyn Parser<'a, T> + 'a> {
+    fn parse(&self, input: &'a str) -> Parsed<'a, T> {
         self.as_ref().parse(input)
     }
 }
@@ -124,11 +121,8 @@ impl<'a> FromIterator<Types<'a>> for Types<'a> {
 /* BASIC COMBINATORS */
 
 // SPECIFIC MATCHERS
-pub fn char<'a, S>(expected: char) -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
-    Box::new(move |input: &'a S| match input.chars().next() {
+pub fn char<'a>(expected: char) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.chars().nth(0) {
         next if next == Some(expected) => Ok((&input[1..], Types::Unit(()))),
         _ => Err(ParseError::Expected(format!(
             "Expected the character '{}' from the input '{}'",
@@ -137,11 +131,8 @@ where
     })
 }
 
-pub fn literal<'a, S>(expected: &'a str) -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
-    Box::new(move |input: &'a S| match input.get(0..expected.len()) {
+pub fn literal<'a>(expected: &'a str) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.get(0..expected.len()) {
         Some(next) if next == expected => Ok((&input[expected.len()..], Types::Unit(()))),
         _ => Err(ParseError::Expected(format!(
             "Expected the literal '{}' from the input '{}'",
@@ -150,44 +141,29 @@ where
     })
 }
 
-pub fn starts_with<'a, S>(prefix: &'a S) -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
-    Box::new(move |input: &'a S| {
-        let prefix_str = prefix.as_ref();
-        match input.as_ref().starts_with(prefix_str) {
-            true => Ok((&input[prefix_str.len()..], Types::Bool(true))),
-            false => Err(ParseError::Expected(format!(
-                "Expected the input '{}' to start with \"{}\".",
-                input, prefix_str
-            ))),
-        }
+pub fn starts_with<'a>(prefix: &'a str) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.starts_with(prefix) {
+        true => Ok((input, Types::Bool(true))),
+        false => Err(ParseError::Expected(format!(
+            "Expected the input '{}' to start with \"{prefix}\".",
+            input
+        ))),
     })
 }
 
-pub fn ends_with<'a, S>(suffix: &'a S) -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
-    Box::new(move |input: &'a S| {
-        let suffix_str = suffix.as_ref();
-        match input.ends_with(suffix_str) {
-            true => Ok((input, Types::Bool(true))),
-            false => Err(ParseError::Expected(format!(
-                "Expected the input '{}' to end with \"{suffix}\".",
-                input
-            ))),
-        }
+pub fn ends_with<'a>(suffix: &'a str) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.ends_with(suffix) {
+        true => Ok((input, Types::Bool(true))),
+        false => Err(ParseError::Expected(format!(
+            "Expected the input '{}' to end with \"{suffix}\".",
+            input
+        ))),
     })
 }
 
 // GENERAL MATCHERS
-pub fn any_char<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
-    Box::new(move |input: &'a S| match input.chars().next() {
+pub fn any_char<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.chars().next() {
         Some(next) => Ok((&input[1..], Types::String(next.to_string()))),
         _ => Err(ParseError::Expected(format!(
             "Expected a character from input '{}'",
@@ -196,11 +172,8 @@ where
     })
 }
 
-pub fn digit<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'static>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
-    Box::new(move |input: &'a S| match input.chars().next() {
+pub fn digit<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'static> {
+    Box::new(move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_numeric() {
                 Ok((&input[1..], Types::String(next.to_string())))
@@ -218,20 +191,14 @@ where
     })
 }
 
-pub fn digits<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
+pub fn digits<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
     Box::new(map(one_or_more(digit()), |chars: Vec<Types<'a>>| {
         chars.into_iter().collect()
     }))
 }
 
-pub fn letter<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'static>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
-    Box::new(move |input: &'a S| match input.chars().next() {
+pub fn letter<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'static> {
+    Box::new(move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_alphabetic() {
                 Ok((&input[1..], Types::String(next.to_string())))
@@ -249,20 +216,15 @@ where
     })
 }
 
-pub fn word<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
+pub fn word<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
     Box::new(map(one_or_more(letter()), |chars| {
         chars.into_iter().collect()
     }))
 }
 
-pub fn alpha_num<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
-    Box::new(move |input: &'a S| match input.chars().next() {
+//xpected struct `Box<dyn Parser<'_, T>>`
+pub fn alpha_num<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
+    Box::new(move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next.is_alphanumeric() {
                 Ok((&input[1..], Types::String(next.to_string())))
@@ -280,20 +242,14 @@ where
     })
 }
 
-pub fn alpha_num_word<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
+pub fn alpha_num_word<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
     Box::new(map(one_or_more(letter()), |chars| {
         chars.into_iter().collect()
     }))
 }
 
-pub fn whitespace<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'static>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
-    Box::new(move |input: &'a S| match input.chars().next() {
+pub fn whitespace<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'static> {
+    Box::new(move |input: &'a str| match input.chars().next() {
         Some(next) => {
             if next == '\r' || next == ' ' || next == '\t' || next == '\n' {
                 Ok((&input[1..], Types::String(next.to_string())))
@@ -311,23 +267,16 @@ where
     })
 }
 
-pub fn spaces<'a, S>() -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
+pub fn spaces<'a>() -> Box<dyn Parser<'a, Types<'a>> + 'a> {
     Box::new(map(one_or_more(whitespace()), |chars| {
         chars.into_iter().collect()
     }))
 }
 
-pub fn end_of_input<'a, S>() -> impl Parser<'a, S, Types<'a>>
-where
-    S: AsRef<str> + 'a + Display + ExactSizeIterator,
-    &'a S: Default,
-{
-    move |input: &'a S| {
-        if input.as_ref().is_empty() {
-            Ok((Default::default(), Types::Unit(())))
+pub fn end_of_input<'a>() -> impl Parser<'a, Types<'a>> {
+    move |input: &'a str| {
+        if input.is_empty() {
+            Ok(("", Types::Unit(())))
         } else {
             Err(ParseError::Expected(format!(
                 "Expected an end of input, but got '{}' instead.",
@@ -339,13 +288,12 @@ where
 
 /* LOGICAL COMBINATORS */
 
-pub fn and<'a, S, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, S, (C, D)>
+pub fn and<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, (C, D)>
 where
-    A: Parser<'a, S, C>,
-    B: Parser<'a, S, D>,
-    S: 'a,
+    A: Parser<'a, C>,
+    B: Parser<'a, D>,
 {
-    move |input: &'a S| {
+    move |input| {
         parser_a.parse(input).and_then(|(next_input, result_a)| {
             parser_b
                 .parse(next_input)
@@ -354,11 +302,10 @@ where
     }
 }
 
-pub fn or<'a, S, P1, P2, A, B>(parser_a: P1, parser_b: P2) -> impl Parser<'a, S, Either<A, B>>
+pub fn or<'a, P1, P2, A, B>(parser_a: P1, parser_b: P2) -> impl Parser<'a, Either<A, B>>
 where
-    P1: Parser<'a, S, A>,
-    P2: Parser<'a, S, B>,
-    S: 'a,
+    P1: Parser<'a, A>,
+    P2: Parser<'a, B>,
 {
     move |input| match parser_a.parse(input) {
         Ok((next_input, result)) => Ok((next_input, Either::Left(result))),
@@ -372,9 +319,9 @@ where
     }
 }
 
-pub fn zero_or_more<'a, S: 'a, P>(parser: P) -> impl Parser<'a, S, Types<'a>>
+pub fn zero_or_more<'a, P>(parser: P) -> impl Parser<'a, Types<'a>>
 where
-    P: Parser<'a, S, Types<'a>>,
+    P: Parser<'a, Types<'a>>,
 {
     move |mut input| {
         let mut result = Vec::new();
@@ -388,12 +335,7 @@ where
     }
 }
 
-pub fn one_or_more<'a, S, A: 'a>(
-    parser: Box<dyn Parser<'a, S, A>>,
-) -> Box<dyn Parser<'a, S, Vec<A>> + 'a>
-where
-    S: 'a + Display,
-{
+pub fn one_or_more<'a, A: 'a>(parser: Box<dyn Parser<'a, A>>) -> Box<dyn Parser<'a, Vec<A>> + 'a> {
     Box::new(move |mut input| {
         let mut result = Vec::new();
 
@@ -416,9 +358,9 @@ where
     })
 }
 
-pub fn optional<'a, S: 'a, P, A>(parser: P) -> impl Parser<'a, S, Option<A>>
+pub fn optional<'a, P, A>(parser: P) -> impl Parser<'a, Option<A>>
 where
-    P: Parser<'a, S, A>,
+    P: Parser<'a, A>,
 {
     move |input| match parser.parse(input) {
         Ok((rest, result)) => Ok((rest, Some(result))),
@@ -426,18 +368,11 @@ where
     }
 }
 
-pub fn sep_by<'a, S, P, T>(parser: P, delimiter: &'a S) -> impl Parser<'a, S, Vec<T>>
+pub fn sep_by<'a, P, T>(parser: P, delimiter: &'a str) -> impl Parser<'a, Vec<T>>
 where
-    P: Parser<'a, S, T> + 'a,
-    S: AsRef<str>
-        + Deref<Target = String>
-        + 'a
-        + Display
-        + Index<RangeFrom<usize>, Output = S>
-        + Index<Range<usize>, Output = S>
-        + PartialEq,
+    P: Parser<'a, T>,
 {
-    move |input: &'a S| {
+    move |input: &'a str| {
         let mut result = vec![];
         let mut remaining = input;
 
@@ -452,7 +387,7 @@ where
                     }
 
                     if let Ok((next, found_delimiter)) =
-                        look_ahead::<S, P>(0, delimiter.len(), delimiter).parse(remaining)
+                        look_ahead::<P>(0, delimiter.len(), delimiter).parse(remaining)
                     {
                         if found_delimiter == delimiter {
                             remaining = &next[delimiter.len()..];
@@ -481,11 +416,11 @@ where
     }
 }
 
-pub fn between<'a, A: 'a, B: 'a, C: 'a, S: 'a>(
-    left: Box<dyn Parser<'a, S, B> + 'a>,
-    parser: Box<dyn Parser<'a, S, A> + 'a>,
-    right: Box<dyn Parser<'a, S, C> + 'a>,
-) -> impl Parser<'a, S, A> + 'a {
+pub fn between<'a, A: 'a, B: 'a, C: 'a>(
+    left: Box<dyn Parser<'a, B> + 'a>,
+    parser: Box<dyn Parser<'a, A> + 'a>,
+    right: Box<dyn Parser<'a, C> + 'a>,
+) -> impl Parser<'a, A> + 'a {
     move |input| {
         let (input, _) = left.parse(input)?;
         let (input, result) = parser.parse(input)?;
@@ -494,12 +429,7 @@ pub fn between<'a, A: 'a, B: 'a, C: 'a, S: 'a>(
     }
 }
 
-pub fn skip<'a, S: 'a, A: 'a>(
-    parser: Box<dyn Parser<'a, S, A> + 'a>,
-) -> Box<dyn Parser<'a, S, Types<'a>> + 'a>
-where
-    S: AsRef<str> + Deref + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
+pub fn skip<'a, A: 'a>(parser: Box<dyn Parser<'a, A> + 'a>) -> Box<dyn Parser<'a, Types<'a>> + 'a> {
     Box::new(move |input| match parser.parse(input) {
         Ok((next, _result)) => Ok((next, Types::Unit(()))),
         Err(e) => Err(ParseError::Unexpected(format!(
@@ -511,9 +441,9 @@ where
 
 /* TRANSFORMATION */
 
-pub fn map<'a, S: 'a, P, F, A, B>(parser: P, map_fn: F) -> impl Parser<'a, S, B>
+pub fn map<'a, P, F, A, B>(parser: P, map_fn: F) -> impl Parser<'a, B>
 where
-    P: Parser<'a, S, A>,
+    P: Parser<'a, A>,
     F: Fn(A) -> B,
 {
     move |input| {
@@ -523,10 +453,9 @@ where
     }
 }
 
-pub fn sequence<'a, S: 'a, P>(parsers: Vec<P>) -> impl Parser<'a, S, Types<'a>>
+pub fn sequence<'a, P>(parsers: Vec<P>) -> impl Parser<'a, Types<'a>>
 where
-    P: Parser<'a, S, Types<'a>>,
-    S: AsRef<str> + Deref + 'a + Display + Index<RangeFrom<usize>, Output = S>,
+    P: Parser<'a, Types<'a>>,
 {
     move |input| {
         let mut results: Vec<Types> = Vec::new();
@@ -548,9 +477,7 @@ where
     }
 }
 
-pub fn choice<'a, S: 'a + Display, T: 'a>(
-    parsers: Vec<Box<dyn Parser<'a, S, T> + 'a>>,
-) -> Box<dyn Parser<'a, S, T> + 'a> {
+pub fn choice<'a, T: 'a>(parsers: Vec<Box<dyn Parser<'a, T> + 'a>>) -> Box<dyn Parser<'a, T> + 'a> {
     Box::new(move |input| {
         for parser in &parsers {
             if let Ok(result) = parser.parse(input) {
@@ -562,36 +489,28 @@ pub fn choice<'a, S: 'a + Display, T: 'a>(
     })
 }
 
-pub fn left<'a, S: 'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, S, C>
+pub fn left<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, C>
 where
-    A: Parser<'a, S, C>,
-    B: Parser<'a, S, D>,
+    A: Parser<'a, C>,
+    B: Parser<'a, D>,
 {
     map(and(parser_a, parser_b), |(left, _right)| left)
 }
 
-pub fn right<'a, S: 'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, S, D>
+pub fn right<'a, A, B, C, D>(parser_a: A, parser_b: B) -> impl Parser<'a, D>
 where
-    A: Parser<'a, S, C>,
-    B: Parser<'a, S, D>,
+    A: Parser<'a, C>,
+    B: Parser<'a, D>,
 {
     map(and(parser_a, parser_b), |(_left, right)| right)
 }
 
-pub fn look_ahead<'a, S, P>(
+pub fn look_ahead<'a, P>(
     position: usize,
     range: usize,
-    delimiter: &'a S,
-) -> impl Parser<'a, S, &'a S>
-where
-    S: AsRef<str>
-        + Deref<Target = String>
-        + 'a
-        + Display
-        + Index<Range<usize>, Output = S>
-        + PartialEq,
-{
-    move |input: &'a S| {
+    delimiter: &'a str,
+) -> impl Parser<'a, &'a str> {
+    move |input: &'a str| {
         let length = input.len();
 
         if length <= position as usize {
@@ -619,18 +538,10 @@ where
     }
 }
 
-pub fn not_followed_by<'a, S>(value: &'a S) -> impl Parser<'a, S, bool>
-where
-    S: AsRef<str>
-        + Deref<Target = String>
-        + 'a
-        + Display
-        + Index<Range<usize>, Output = S>
-        + PartialEq,
-{
-    move |input: &'a S| match input.get(1..value.len()) {
+pub fn not_followed_by<'a>(value: &'a str) -> impl Parser<'a, bool> {
+    move |input: &'a str| match input.get(1..value.len()) {
         Some(following) => {
-            if following == value.as_ref() {
+            if following == value {
                 Err(ParseError::Unexpected(format!(
                     "Unexpected value '{}' after '{}'",
                     following,
@@ -645,18 +556,12 @@ where
 }
 
 /* ERROR HANDLING */
-pub fn fail<'a, S>(message: &'a S) -> impl Parser<'a, S, ParseError>
-where
-    S: AsRef<str> + Deref + 'a + Display,
-{
-    move |_input: &'a S| Err(ParseError::Message(message.to_string()))
+pub fn fail<'a>(message: &'a str) -> impl Parser<'a, ParseError> {
+    move |_input: &'a str| Err(ParseError::Message(message.to_string()))
 }
 
 /* UTILITY PARSERS */
-pub fn identifier<'a, S: 'a>(input: &S) -> Parsed<S, String>
-where
-    S: AsRef<str> + Deref<Target = String> + 'a + Display + Index<RangeFrom<usize>, Output = S>,
-{
+pub fn identifier<'a>(input: &str) -> Parsed<String> {
     let mut matched = String::new();
     let mut chars = input.chars();
 
